@@ -6,7 +6,9 @@ edition = "2018"
 
 [dependencies]
 anyhow = "1"
+eframe = "0.12"
 log = "0.4.11"
+rfd = "0.4"
 riff = "1.0"
 stderrlog = "0.5"
 structopt = "0.3"
