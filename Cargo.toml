@@ -7,6 +7,7 @@ edition = "2018"
 [dependencies]
 anyhow = "1"
 eframe = "0.12"
+id_tree = "1.8"
 log = "0.4.11"
 rfd = "0.4"
 riff = "1.0"

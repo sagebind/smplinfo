@@ -1,7 +1,8 @@
-use eframe::{egui, epi};
+use eframe::{egui::{self, Ui, vec2}, epi};
+use id_tree::NodeId;
 use rfd::FileDialog;
 
-use crate::workspace::Workspace;
+use crate::workspace::{Directory, Workspace};
 
 pub struct App {
     workspace: Workspace,
@@ -22,9 +23,9 @@ impl epi::App for App {
 
     fn update(&mut self, ctx: &egui::CtxRef, frame: &mut epi::Frame<'_>) {
         let workspace = &mut self.workspace;
+        workspace.update();
 
         egui::TopPanel::top("top_panel").show(ctx, |ui| {
-            // The top panel is often a good place for a menu bar:
             egui::menu::bar(ui, |ui| {
                 egui::menu::menu(ui, "File", |ui| {
                     if ui.button("Quit").clicked() {
@@ -36,13 +37,13 @@ impl epi::App for App {
             });
         });
 
-        egui::SidePanel::left("side_panel", 200.0).show(ctx, |ui| {
+        egui::SidePanel::left("side_panel", 300.0).show(ctx, |ui| {
             ui.heading("Browser");
 
             if ui.button("Pick directory").clicked() {
                 if let Some(dir) = FileDialog::new().pick_folder() {
                     // Open a new workspace.
-                    *workspace = Workspace::open(dir);
+                    workspace.open(dir);
 
                     // Kick off reloading the dir tree.
                     workspace.refresh_async();
@@ -50,30 +51,48 @@ impl epi::App for App {
             }
 
             egui::containers::ScrollArea::auto_sized().show(ui, |ui| {
-                for dir in workspace.root_directory().children() {
-                    ui.label(dir.name());
-
-                    for dir in dir.children() {
-                        ui.label("\\- ".to_string() + dir.name());
-
-                        for dir in dir.children() {
-                            ui.label("    \\- ".to_string() + dir.name());
-                        }
-                    }
+                if let Some(id) = workspace.directories().root_node_id() {
+                    directory_tree(ui, workspace, id);
                 }
             });
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("Select a directory...");
+            ui.heading("File List");
+
+            if let Some(node_id) = workspace.get_selected_directory() {
+                let node = workspace.directories().get(&node_id).unwrap();
+                ui.heading(node.data().path().to_string_lossy().as_ref());
+            } else {
+                ui.heading("Select a directory...");
+            }
+
+            ui.with_layout(egui::Layout::bottom_up(egui::Align::Center), |ui| {
+                ui.heading("Wave Form");
+            });
         });
+    }
+}
+
+fn directory_tree(ui: &mut Ui, workspace: &Workspace, node_id: &NodeId) {
+    if let Ok(node) = workspace.directories().get(node_id) {
+        if ui.selectable_label(workspace.is_selected(node_id), node.data().name()).clicked() {
+            workspace.set_selected_directory(node_id);
+        }
+
+        if !node.children().is_empty() {
+            ui.group(|ui| {
+                for child_id in node.children() {
+                    directory_tree(ui, workspace, child_id);
+                }
+            });
+        }
     }
 }
 
 pub fn main() {
     let app = App::default();
     let native_options = eframe::NativeOptions::default();
-    app.workspace.refresh_async();
 
     eframe::run_native(Box::new(app), native_options);
 }
