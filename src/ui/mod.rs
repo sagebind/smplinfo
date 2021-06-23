@@ -1,18 +1,49 @@
+use std::path::PathBuf;
+
 use eframe::{egui::{self, Ui, vec2}, epi};
+use futures_lite::future::{self, block_on, poll_once};
 use id_tree::NodeId;
-use rfd::FileDialog;
+use rfd::AsyncFileDialog;
 
 use crate::workspace::{Directory, Workspace};
 
 pub struct App {
     workspace: Workspace,
+    folder_picker: Option<future::Boxed<Option<PathBuf>>>,
 }
 
 impl Default for App {
     fn default() -> Self {
         Self {
             workspace: Workspace::default(),
+            folder_picker: None,
         }
+    }
+}
+
+impl App {
+    fn poll_updates(&mut self) {
+        let mut clear_picker = false;
+
+        if let Some(future) = self.folder_picker.as_mut() {
+            if let Some(result) = block_on(poll_once(future)) {
+                clear_picker = true;
+
+                if let Some(dir) = result {
+                    // Open a new workspace.
+                    self.workspace.open(dir);
+
+                    // Kick off reloading the dir tree.
+                    self.workspace.refresh_async();
+                }
+            }
+        }
+
+        if clear_picker {
+            self.folder_picker = None;
+        }
+
+        self.workspace.update();
     }
 }
 
@@ -22,8 +53,7 @@ impl epi::App for App {
     }
 
     fn update(&mut self, ctx: &egui::CtxRef, frame: &mut epi::Frame<'_>) {
-        let workspace = &mut self.workspace;
-        workspace.update();
+        self.poll_updates();
 
         egui::TopPanel::top("top_panel").show(ctx, |ui| {
             egui::menu::bar(ui, |ui| {
@@ -41,18 +71,16 @@ impl epi::App for App {
             ui.heading("Browser");
 
             if ui.button("Pick directory").clicked() {
-                if let Some(dir) = FileDialog::new().pick_folder() {
-                    // Open a new workspace.
-                    workspace.open(dir);
-
-                    // Kick off reloading the dir tree.
-                    workspace.refresh_async();
+                if self.folder_picker.is_none() {
+                    self.folder_picker = Some(Box::pin(async {
+                        AsyncFileDialog::new().pick_folder().await.map(|handle| handle.path().to_path_buf())
+                    }));
                 }
             }
 
             egui::containers::ScrollArea::auto_sized().show(ui, |ui| {
-                if let Some(id) = workspace.directories().root_node_id() {
-                    directory_tree(ui, workspace, id);
+                if let Some(id) = self.workspace.directories().root_node_id() {
+                    directory_tree(ui, &self.workspace, id);
                 }
             });
         });
@@ -60,8 +88,8 @@ impl epi::App for App {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading("File List");
 
-            if let Some(node_id) = workspace.get_selected_directory() {
-                let node = workspace.directories().get(&node_id).unwrap();
+            if let Some(node_id) = self.workspace.get_selected_directory() {
+                let node = self.workspace.directories().get(&node_id).unwrap();
                 ui.heading(node.data().path().to_string_lossy().as_ref());
             } else {
                 ui.heading("Select a directory...");
