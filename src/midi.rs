@@ -1,7 +1,10 @@
+//! MIDI spec type definitions.
+
 use std::{fmt, str::FromStr};
 
 const NOTE_NAMES: &'static [&'static str] = &["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 
+/// A MIDI note number.
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Note(u8);
 

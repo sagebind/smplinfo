@@ -6,14 +6,17 @@ edition = "2018"
 
 [dependencies]
 anyhow = "1"
+cpal = "0.13"
 eframe = "0.12"
 futures-lite = "1.12"
 id_tree = "1.8"
 log = "0.4.11"
+notify = "4"
 rfd = "0.4"
 riff = "1.0"
 stderrlog = "0.5"
 structopt = "0.3"
+threadpool = "1.8"
 walkdir = "2.3"
 
 # Do some optimization to dependencies on debug builds so they aren't too laggy to

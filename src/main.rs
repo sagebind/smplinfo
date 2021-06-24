@@ -7,6 +7,7 @@ use anyhow::Result;
 
 mod cli;
 mod midi;
+mod sample;
 mod ui;
 mod wav;
 mod workspace;

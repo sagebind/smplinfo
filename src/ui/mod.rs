@@ -1,46 +1,46 @@
-use std::path::PathBuf;
+use std::{
+    path::PathBuf,
+    sync::mpsc::{self, Receiver, Sender},
+};
 
-use eframe::{egui::{self, Ui, vec2}, epi};
-use futures_lite::future::{self, block_on, poll_once};
+use eframe::{
+    egui::{self, vec2, Ui},
+    epi,
+};
 use id_tree::NodeId;
-use rfd::AsyncFileDialog;
 
 use crate::workspace::{Directory, Workspace};
 
+use self::directory_picker::PickDirectoryTask;
+
+mod directory_picker;
+mod tasks;
+
 pub struct App {
     workspace: Workspace,
-    folder_picker: Option<future::Boxed<Option<PathBuf>>>,
+    pick_directory_task: Option<PickDirectoryTask>,
 }
 
 impl Default for App {
     fn default() -> Self {
         Self {
             workspace: Workspace::default(),
-            folder_picker: None,
+            pick_directory_task: None,
         }
     }
 }
 
 impl App {
     fn poll_updates(&mut self) {
-        let mut clear_picker = false;
-
-        if let Some(future) = self.folder_picker.as_mut() {
-            if let Some(result) = block_on(poll_once(future)) {
-                clear_picker = true;
+        if let Some(task) = self.pick_directory_task.as_mut() {
+            if let Some(result) = task.poll() {
+                self.pick_directory_task = None;
 
                 if let Some(dir) = result {
                     // Open a new workspace.
                     self.workspace.open(dir);
-
-                    // Kick off reloading the dir tree.
-                    self.workspace.refresh_async();
                 }
             }
-        }
-
-        if clear_picker {
-            self.folder_picker = None;
         }
 
         self.workspace.update();
@@ -53,6 +53,8 @@ impl epi::App for App {
     }
 
     fn update(&mut self, ctx: &egui::CtxRef, frame: &mut epi::Frame<'_>) {
+        tasks::run_queued(self);
+
         self.poll_updates();
 
         egui::TopPanel::top("top_panel").show(ctx, |ui| {
@@ -71,16 +73,14 @@ impl epi::App for App {
             ui.heading("Browser");
 
             if ui.button("Pick directory").clicked() {
-                if self.folder_picker.is_none() {
-                    self.folder_picker = Some(Box::pin(async {
-                        AsyncFileDialog::new().pick_folder().await.map(|handle| handle.path().to_path_buf())
-                    }));
+                if self.pick_directory_task.is_none() {
+                    self.pick_directory_task = Some(PickDirectoryTask::new());
                 }
             }
 
             egui::containers::ScrollArea::auto_sized().show(ui, |ui| {
-                if let Some(id) = self.workspace.directories().root_node_id() {
-                    directory_tree(ui, &self.workspace, id);
+                if let Some(id) = self.workspace.directories().root_node_id().cloned() {
+                    directory_tree(ui, &self.workspace, &id);
                 }
             });
         });
@@ -91,12 +91,24 @@ impl epi::App for App {
             if let Some(node_id) = self.workspace.get_selected_directory() {
                 let node = self.workspace.directories().get(&node_id).unwrap();
                 ui.heading(node.data().path().to_string_lossy().as_ref());
+
+                egui::containers::ScrollArea::auto_sized().show(ui, |ui| {
+                    for sample in self.workspace.files() {
+                        if let Some(note) = sample.note() {
+                            ui.label(format!("{} -- {}", sample.name(), note));
+                        } else {
+                            ui.label(sample.name().as_ref());
+                        }
+                    }
+                });
             } else {
                 ui.heading("Select a directory...");
             }
 
             ui.with_layout(egui::Layout::bottom_up(egui::Align::Center), |ui| {
-                ui.heading("Wave Form");
+                ui.group(|ui| {
+                    ui.heading("Wave Form");
+                });
             });
         });
     }
@@ -104,8 +116,15 @@ impl epi::App for App {
 
 fn directory_tree(ui: &mut Ui, workspace: &Workspace, node_id: &NodeId) {
     if let Ok(node) = workspace.directories().get(node_id) {
-        if ui.selectable_label(workspace.is_selected(node_id), node.data().name()).clicked() {
-            workspace.set_selected_directory(node_id);
+        if ui
+            .selectable_label(workspace.is_selected(node_id), node.data().name())
+            .clicked()
+        {
+            let node_id = node_id.clone();
+
+            tasks::enqueue(move |app| {
+                app.workspace.set_selected_directory(&node_id);
+            });
         }
 
         if !node.children().is_empty() {
