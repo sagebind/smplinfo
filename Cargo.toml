@@ -7,7 +7,7 @@ edition = "2018"
 [dependencies]
 anyhow = "1"
 cpal = "0.13"
-eframe = "0.12"
+eframe = "0.13"
 futures-lite = "1.12"
 id_tree = "1.8"
 log = "0.4.11"

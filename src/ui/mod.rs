@@ -57,7 +57,7 @@ impl epi::App for App {
 
         self.poll_updates();
 
-        egui::TopPanel::top("top_panel").show(ctx, |ui| {
+        egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
             egui::menu::bar(ui, |ui| {
                 egui::menu::menu(ui, "File", |ui| {
                     if ui.button("Quit").clicked() {
@@ -69,7 +69,7 @@ impl epi::App for App {
             });
         });
 
-        egui::SidePanel::left("side_panel", 300.0).show(ctx, |ui| {
+        egui::SidePanel::left("side_panel").default_width(200.0).show(ctx, |ui| {
             ui.heading("Browser");
 
             if ui.button("Pick directory").clicked() {
