@@ -11,14 +11,18 @@ use id_tree::NodeId;
 
 use crate::workspace::{Directory, Workspace};
 
-use self::directory_picker::PickDirectoryTask;
+use self::{about_dialog::AboutDialog, directory_picker::PickDirectoryTask, table::Table};
 
+mod about_dialog;
 mod directory_picker;
+mod table;
 mod tasks;
 
 pub struct App {
     workspace: Workspace,
     pick_directory_task: Option<PickDirectoryTask>,
+    about_window_open: bool,
+    about_dialog: AboutDialog,
 }
 
 impl Default for App {
@@ -26,6 +30,8 @@ impl Default for App {
         Self {
             workspace: Workspace::default(),
             pick_directory_task: None,
+            about_window_open: false,
+            about_dialog: AboutDialog::default(),
         }
     }
 }
@@ -65,41 +71,57 @@ impl epi::App for App {
                     }
                 });
 
+                egui::menu::menu(ui, "Help", |ui| {
+                    if ui.button("About").clicked() {
+                        // self.about_window_open = true;
+                        self.about_dialog.show();
+                    }
+                });
+
                 egui::warn_if_debug_build(ui);
             });
         });
 
-        egui::SidePanel::left("side_panel").default_width(200.0).show(ctx, |ui| {
-            ui.heading("Browser");
+        egui::SidePanel::left("side_panel")
+            .default_width(200.0)
+            .show(ctx, |ui| {
+                ui.heading("Browser");
 
-            if ui.button("Pick directory").clicked() {
-                if self.pick_directory_task.is_none() {
-                    self.pick_directory_task = Some(PickDirectoryTask::new());
+                if ui.button("Pick directory").clicked() {
+                    if self.pick_directory_task.is_none() {
+                        self.pick_directory_task = Some(PickDirectoryTask::new());
+                    }
                 }
-            }
 
-            egui::containers::ScrollArea::auto_sized().show(ui, |ui| {
-                if let Some(id) = self.workspace.directories().root_node_id().cloned() {
-                    directory_tree(ui, &self.workspace, &id);
-                }
+                egui::containers::ScrollArea::auto_sized().show(ui, |ui| {
+                    if let Some(id) = self.workspace.directories().root_node_id().cloned() {
+                        directory_tree(ui, &self.workspace, &id);
+                    }
+                });
             });
-        });
 
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading("File List");
 
             if let Some(node_id) = self.workspace.get_selected_directory() {
                 let node = self.workspace.directories().get(&node_id).unwrap();
-                ui.heading(node.data().path().to_string_lossy().as_ref());
+
+                let mut path = node.data().path().to_string_lossy().into_owned();
+                ui.add(egui::TextEdit::singleline(&mut path).enabled(false));
 
                 egui::containers::ScrollArea::auto_sized().show(ui, |ui| {
-                    for sample in self.workspace.files() {
-                        if let Some(note) = sample.note() {
-                            ui.label(format!("{} -- {}", sample.name(), note));
-                        } else {
+                    ui.add(Table::new("file_list")
+                        .column("Filename")
+                        .column("Note")
+                        .rows(self.workspace.files(), |sample, ui| {
                             ui.label(sample.name().as_ref());
-                        }
-                    }
+
+                            if let Some(note) = sample.note() {
+                                ui.label(note.to_string());
+                            } else {
+                                ui.label("-");
+                            }
+                        }));
                 });
             } else {
                 ui.heading("Select a directory...");

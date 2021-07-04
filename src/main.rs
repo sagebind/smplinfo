@@ -6,6 +6,7 @@ use std::env;
 use anyhow::Result;
 
 mod cli;
+mod futures;
 mod midi;
 mod sample;
 mod ui;
