@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::{fmt, path::{Path, PathBuf}};
 
 use id_tree::Tree;
 
@@ -29,5 +29,11 @@ impl Directory {
 
     pub fn path(&self) -> &Path {
         self.path.as_path()
+    }
+}
+
+impl fmt::Display for Directory {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.name().fmt(f)
     }
 }

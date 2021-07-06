@@ -68,6 +68,7 @@ impl Workspace {
 
         let sender = self.file_loader_channel.0.clone();
         let path = self.directories.get(node_id).unwrap().data().path().to_path_buf();
+        println!("selected directory changed to {:?}", path);
 
         // TODO: Cancel any existing tasks loading samples.
         self.pool.execute(move || {

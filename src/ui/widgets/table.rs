@@ -1,7 +1,8 @@
 use std::{fmt::Display, hash::Hash};
 
-use eframe::egui::{Grid, Id, Response, Ui, Widget};
+use eframe::egui::{self, Grid, Id, Layout, Response, Ui, Widget};
 
+/// An ordinary table. Feature set is currently pretty limited.
 pub struct Table<'rows, R> {
     id_source: Id,
     columns: Vec<String>,
@@ -33,22 +34,24 @@ impl<'rows, R> Table<'rows, R> {
 
 impl<'rows, R> Widget for Table<'rows, R> {
     fn ui(mut self, ui: &mut Ui) -> Response {
-        Grid::new(self.id_source)
-            .striped(true)
-            .show(ui, move |ui| {
-                for column in self.columns {
-                    ui.button(column);
-                }
-
-                ui.end_row();
-
-                if let Some(rows) = self.rows.take() {
-                    for row in rows {
-                        (self.row_widget.as_mut().unwrap())(row, ui);
-                        ui.end_row();
+        ui.with_layout(Layout::top_down_justified(egui::Align::Min), |ui| {
+            Grid::new(self.id_source)
+                .striped(true)
+                .show(ui, move |ui| {
+                    for column in self.columns {
+                        ui.button(column);
                     }
-                }
-            })
-            .response
+
+                    ui.end_row();
+
+                    if let Some(rows) = self.rows.take() {
+                        for row in rows {
+                            (self.row_widget.as_mut().unwrap())(row, ui);
+                            ui.end_row();
+                        }
+                    }
+                })
+                .response
+        }).response
     }
 }

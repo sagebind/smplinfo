@@ -4,25 +4,30 @@ use std::{
 };
 
 use eframe::{
-    egui::{self, vec2, Ui},
+    egui::{self, vec2, Layout, Ui},
     epi,
 };
 use id_tree::NodeId;
 
 use crate::workspace::{Directory, Workspace};
 
-use self::{about_dialog::AboutDialog, directory_picker::PickDirectoryTask, table::Table};
+use self::{
+    about_dialog::AboutDialog,
+    directory_picker::PickDirectoryTask,
+    widgets::{Table, TreeView},
+};
 
 mod about_dialog;
 mod directory_picker;
-mod table;
 mod tasks;
+mod widgets;
 
 pub struct App {
     workspace: Workspace,
     pick_directory_task: Option<PickDirectoryTask>,
     about_window_open: bool,
     about_dialog: AboutDialog,
+    selected_directory: Option<NodeId>,
 }
 
 impl Default for App {
@@ -32,6 +37,7 @@ impl Default for App {
             pick_directory_task: None,
             about_window_open: false,
             about_dialog: AboutDialog::default(),
+            selected_directory: None,
         }
     }
 }
@@ -93,11 +99,13 @@ impl epi::App for App {
                     }
                 }
 
-                egui::containers::ScrollArea::auto_sized().show(ui, |ui| {
-                    if let Some(id) = self.workspace.directories().root_node_id().cloned() {
-                        directory_tree(ui, &self.workspace, &id);
+                if ui.add(TreeView::new("dir_tree", self.workspace.directories(), &mut self.selected_directory)).changed() {
+                    if let Some(node_id) = self.selected_directory.clone() {
+                        tasks::enqueue(move |app| {
+                            app.workspace.set_selected_directory(&node_id);
+                        });
                     }
-                });
+                }
             });
 
         egui::CentralPanel::default().show(ctx, |ui| {
@@ -110,18 +118,23 @@ impl epi::App for App {
                 ui.add(egui::TextEdit::singleline(&mut path).enabled(false));
 
                 egui::containers::ScrollArea::auto_sized().show(ui, |ui| {
-                    ui.add(Table::new("file_list")
-                        .column("Filename")
-                        .column("Note")
-                        .rows(self.workspace.files(), |sample, ui| {
-                            ui.label(sample.name().as_ref());
+                    ui.with_layout(Layout::top_down_justified(egui::Align::Min), |ui| {
+                        // ui.centered_and_justified(|ui| {
+                        ui.add(
+                            Table::new("file_list")
+                                .column("Filename")
+                                .column("Note")
+                                .rows(self.workspace.files(), |sample, ui| {
+                                    ui.label(sample.name().as_ref());
 
-                            if let Some(note) = sample.note() {
-                                ui.label(note.to_string());
-                            } else {
-                                ui.label("-");
-                            }
-                        }));
+                                    if let Some(note) = sample.note() {
+                                        ui.label(note.to_string());
+                                    } else {
+                                        ui.label("-");
+                                    }
+                                }),
+                        );
+                    });
                 });
             } else {
                 ui.heading("Select a directory...");
@@ -133,29 +146,6 @@ impl epi::App for App {
                 });
             });
         });
-    }
-}
-
-fn directory_tree(ui: &mut Ui, workspace: &Workspace, node_id: &NodeId) {
-    if let Ok(node) = workspace.directories().get(node_id) {
-        if ui
-            .selectable_label(workspace.is_selected(node_id), node.data().name())
-            .clicked()
-        {
-            let node_id = node_id.clone();
-
-            tasks::enqueue(move |app| {
-                app.workspace.set_selected_directory(&node_id);
-            });
-        }
-
-        if !node.children().is_empty() {
-            ui.group(|ui| {
-                for child_id in node.children() {
-                    directory_tree(ui, workspace, child_id);
-                }
-            });
-        }
     }
 }
 
