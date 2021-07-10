@@ -79,12 +79,9 @@ impl epi::App for App {
 
                 egui::menu::menu(ui, "Help", |ui| {
                     if ui.button("About").clicked() {
-                        // self.about_window_open = true;
                         self.about_dialog.show();
                     }
                 });
-
-                egui::warn_if_debug_build(ui);
             });
         });
 
@@ -121,18 +118,13 @@ impl epi::App for App {
                     ui.with_layout(Layout::top_down_justified(egui::Align::Min), |ui| {
                         // ui.centered_and_justified(|ui| {
                         ui.add(
-                            Table::new("file_list")
-                                .column("Filename")
-                                .column("Note")
-                                .rows(self.workspace.files(), |sample, ui| {
-                                    ui.label(sample.name().as_ref());
-
-                                    if let Some(note) = sample.note() {
-                                        ui.label(note.to_string());
-                                    } else {
-                                        ui.label("-");
-                                    }
-                                }),
+                            Table::new("file_list", self.workspace.files())
+                                .column("Filename", |sample| sample.name().into_owned())
+                                .column("Note", |sample| if let Some(note) = sample.note() {
+                                    note.to_string()
+                                } else {
+                                    "-".to_owned()
+                                })
                         );
                     });
                 });

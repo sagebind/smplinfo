@@ -3,52 +3,58 @@ use std::{fmt::Display, hash::Hash};
 use eframe::egui::{self, Grid, Id, Layout, Response, Ui, Widget};
 
 /// An ordinary table. Feature set is currently pretty limited.
-pub struct Table<'rows, R> {
+///
+/// - `R`: The data type of a single row displayed.
+/// - `C`: The type of collection holding the rows to display. Any collection
+///   implementing `AsRef<[R]>` can be used.
+pub struct Table<R, C: AsRef<[R]>> {
     id_source: Id,
-    columns: Vec<String>,
-    rows: Option<&'rows [R]>,
-    row_widget: Option<Box<dyn FnMut(&R, &mut Ui)>>,
+    rows: C,
+    columns: Vec<Column<R>>,
 }
 
-impl<'rows, R> Table<'rows, R> {
-    pub fn new(id_source: impl Hash) -> Self {
+/// Table column definition.
+struct Column<R> {
+    name: String,
+    value_mapper: Box<dyn FnMut(&R) -> String>
+}
+
+impl<R, C: AsRef<[R]>> Table<R, C> {
+    pub fn new(id_source: impl Hash, rows: C) -> Self {
         Self {
             id_source: Id::new(id_source),
+            rows,
             columns: Vec::new(),
-            rows: None,
-            row_widget: None,
         }
     }
 
-    pub fn column(mut self, name: impl Display) -> Self {
-        self.columns.push(name.to_string());
-        self
-    }
-
-    pub fn rows(mut self, rows: &'rows [R], widget: impl FnMut(&R, &mut Ui) + 'static) -> Self {
-        self.rows = Some(rows);
-        self.row_widget = Some(Box::new(widget));
+    pub fn column(mut self, name: impl Display, value_mapper: impl FnMut(&R) -> String + 'static) -> Self {
+        self.columns.push(Column {
+            name: name.to_string(),
+            value_mapper: Box::new(value_mapper),
+        });
         self
     }
 }
 
-impl<'rows, R> Widget for Table<'rows, R> {
+impl<R, C: AsRef<[R]>> Widget for Table<R, C> {
     fn ui(mut self, ui: &mut Ui) -> Response {
         ui.with_layout(Layout::top_down_justified(egui::Align::Min), |ui| {
             Grid::new(self.id_source)
                 .striped(true)
                 .show(ui, move |ui| {
-                    for column in self.columns {
-                        ui.button(column);
+                    for column in self.columns.iter() {
+                        ui.button(&column.name);
                     }
 
                     ui.end_row();
 
-                    if let Some(rows) = self.rows.take() {
-                        for row in rows {
-                            (self.row_widget.as_mut().unwrap())(row, ui);
-                            ui.end_row();
+                    for row in self.rows.as_ref() {
+                        for column in self.columns.iter_mut() {
+                            ui.label((column.value_mapper)(row));
                         }
+
+                        ui.end_row();
                     }
                 })
                 .response

@@ -24,11 +24,19 @@ impl AboutDialog {
 
         let future = AsyncMessageDialog::new()
             .set_title("About")
-            .set_description(&format!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION")))
+            .set_description(&about_string())
             .set_buttons(MessageButtons::Ok)
             .show()
             .boxed();
 
         self.future = Some(future);
+    }
+}
+
+fn about_string() -> String {
+    if cfg!(debug_assertions) {
+        format!("{} {} (debug build)", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"))
+    } else {
+        format!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"))
     }
 }
