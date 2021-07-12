@@ -1,7 +1,7 @@
-use futures_lite::{FutureExt, future::Boxed};
+use futures_lite::{future::Boxed, FutureExt};
 use rfd::{AsyncMessageDialog, MessageButtons};
 
-use crate::futures::{FuturePoller, poll_once_blocking};
+use crate::futures::poll_once_blocking;
 
 #[derive(Default)]
 pub struct AboutDialog {
@@ -15,7 +15,7 @@ impl AboutDialog {
 
     pub fn show(&mut self) {
         if let Some(future) = self.future.as_mut() {
-            if let Some(result) = poll_once_blocking(future) {
+            if let Some(_) = poll_once_blocking(future) {
                 self.future = None;
             } else {
                 return;
@@ -35,7 +35,11 @@ impl AboutDialog {
 
 fn about_string() -> String {
     if cfg!(debug_assertions) {
-        format!("{} {} (debug build)", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"))
+        format!(
+            "{} {} (debug build)",
+            env!("CARGO_PKG_NAME"),
+            env!("CARGO_PKG_VERSION")
+        )
     } else {
         format!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"))
     }

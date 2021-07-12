@@ -1,63 +1,297 @@
 use std::{fmt::Display, hash::Hash};
 
-use eframe::egui::{self, Grid, Id, Layout, Response, Ui, Widget};
+use eframe::egui::{vec2, Id, Key, Response, ScrollArea, Sense, TextStyle, Ui, Vec2, Widget};
+
+const DEFAULT_COLUMN_WIDTH: f32 = 200.0;
 
 /// An ordinary table. Feature set is currently pretty limited.
 ///
 /// - `R`: The data type of a single row displayed.
 /// - `C`: The type of collection holding the rows to display. Any collection
 ///   implementing `AsRef<[R]>` can be used.
-pub struct Table<R, C: AsRef<[R]>> {
+pub struct Table<'selection, R, C: AsRef<[R]>> {
     id_source: Id,
     rows: C,
     columns: Vec<Column<R>>,
+    selected_row: Option<&'selection mut Option<usize>>,
+    header_height: f32,
+    row_height: f32,
+    cell_padding: Vec2,
 }
 
 /// Table column definition.
 struct Column<R> {
     name: String,
-    value_mapper: Box<dyn FnMut(&R) -> String>
+    value_mapper: Box<dyn FnMut(&R) -> String>,
+    max_width: Option<f32>,
 }
 
-impl<R, C: AsRef<[R]>> Table<R, C> {
+impl<R, C: AsRef<[R]>> Table<'static, R, C> {
     pub fn new(id_source: impl Hash, rows: C) -> Self {
         Self {
             id_source: Id::new(id_source),
             rows,
             columns: Vec::new(),
+            selected_row: None,
+            header_height: 28.0,
+            row_height: 24.0,
+            cell_padding: vec2(8.0, 4.0),
         }
-    }
-
-    pub fn column(mut self, name: impl Display, value_mapper: impl FnMut(&R) -> String + 'static) -> Self {
-        self.columns.push(Column {
-            name: name.to_string(),
-            value_mapper: Box::new(value_mapper),
-        });
-        self
     }
 }
 
-impl<R, C: AsRef<[R]>> Widget for Table<R, C> {
+impl<'s, R, C: AsRef<[R]>> Table<'s, R, C> {
+    pub fn new_selectable(
+        id_source: impl Hash,
+        rows: C,
+        selected_row: &'s mut Option<usize>,
+    ) -> Self {
+        Self {
+            id_source: Id::new(id_source),
+            rows,
+            columns: Vec::new(),
+            selected_row: Some(selected_row),
+            header_height: 28.0,
+            row_height: 24.0,
+            cell_padding: vec2(8.0, 4.0),
+        }
+    }
+
+    pub fn column(
+        mut self,
+        name: impl Display,
+        value_mapper: impl FnMut(&R) -> String + 'static,
+    ) -> Self {
+        self.columns.push(Column {
+            name: name.to_string(),
+            value_mapper: Box::new(value_mapper),
+            max_width: None,
+        });
+        self
+    }
+
+    fn supports_selection(&self) -> bool {
+        self.selected_row.is_some()
+    }
+
+    fn header_ui(&mut self, ui: &mut Ui, state: &mut State) {
+        let header_text_style = TextStyle::Body;
+
+        // Table always grows as wide as available, so the header should too.
+        let (_, rect) = ui.allocate_space(vec2(ui.available_width(), self.header_height));
+
+        // Header background
+        let painter = ui.painter_at(rect);
+        painter.rect_filled(
+            rect,
+            ui.visuals().widgets.inactive.corner_radius,
+            ui.visuals().widgets.inactive.bg_fill,
+        );
+
+        let mut column_offset = 0.0;
+
+        for (i, column) in self.columns.iter().enumerate() {
+            let column_id = self.id_source.with("_column_").with(i);
+
+            let desired_column_width = state.column_width(i);
+            let galley = ui
+                .fonts()
+                .layout_single_line(header_text_style, column.name.clone());
+
+            let mut column_rect = rect;
+            column_rect.min.x += column_offset;
+
+            if column_rect.width() > desired_column_width {
+                column_rect.set_width(desired_column_width);
+            }
+
+            let response = ui.interact(column_rect, column_id, Sense::hover());
+
+            if response.hovered() {
+                ui.painter().rect_stroke(
+                    column_rect,
+                    ui.visuals().widgets.hovered.corner_radius,
+                    ui.visuals().widgets.hovered.bg_stroke
+                );
+            }
+
+            let mut text_pos = column_rect.left_center();
+            text_pos.x += self.cell_padding.x;
+            text_pos.y -= galley.size.y / 2.0;
+            ui.painter_at(column_rect).galley(
+                text_pos,
+                galley,
+                if response.hovered() {
+                    ui.style().visuals.widgets.hovered.fg_stroke.color
+                } else {
+                    ui.style().visuals.widgets.inactive.fg_stroke.color
+                },
+            );
+
+            column_offset += column_rect.width();
+        }
+    }
+}
+
+impl<'s, R, C: AsRef<[R]>> Widget for Table<'s, R, C> {
     fn ui(mut self, ui: &mut Ui) -> Response {
-        ui.with_layout(Layout::top_down_justified(egui::Align::Min), |ui| {
-            Grid::new(self.id_source)
-                .striped(true)
-                .show(ui, move |ui| {
-                    for column in self.columns.iter() {
-                        ui.button(&column.name);
+        if self.columns.is_empty() {
+            panic!("uh, what do I do if no columns are defined?");
+        }
+
+        let mut state = ui
+            .memory()
+            .id_data_temp
+            .get_or_default::<State>(self.id_source)
+            .clone();
+
+        // First step: compute some sizes used during rendering. Since this is a
+        // homogenous table, we can figure out its exact sizes based on the
+        // number of rows and columns.
+        let table_rect = ui.available_rect_before_wrap_finite();
+        let response = ui.interact(table_rect, self.id_source, Sense::click());
+
+        ui.scope(|ui| {
+            // When laying out the table, don't allocate any spacing between the
+            // header and rows.
+            ui.spacing_mut().item_spacing.y = 0.0;
+
+            self.header_ui(ui, &mut state);
+
+            ui.add_space(4.0);
+
+            // Now render the table body, which is inside an independently
+            // scrollable area.
+            ScrollArea::auto_sized().show(ui, |ui| {
+                // TODO: Decide row height more intelligently...
+                let row_size = vec2(ui.available_width(), self.row_height);
+                let cell_text_style = ui.style().body_text_style;
+
+                for (row_idx, row) in self.rows.as_ref().into_iter().enumerate() {
+                    let (_, row_rect) = ui.allocate_space(row_size);
+                    let row_id = self.id_source.with("_row_").with(row_idx);
+                    let response = ui.interact(row_rect, row_id, Sense::click());
+                    let mut cell_text_color = ui.style().visuals.text_color();
+
+                    // If this row is currently selected, make it look like it is.
+                    if self.selected_row == Some(&mut Some(row_idx)) {
+                        cell_text_color = ui.visuals().strong_text_color();
+                        ui.painter().rect_filled(
+                            row_rect,
+                            0.0,
+                            ui.style().visuals.selection.bg_fill,
+                        );
+                    } else if response.hovered() {
+                        ui.painter().rect_filled(
+                            row_rect,
+                            0.0,
+                            ui.visuals().widgets.hovered.bg_fill,
+                        );
+                    } else if row_idx % 2 > 0 {
+                        ui.painter()
+                            .rect_filled(row_rect, 0.0, ui.visuals().faint_bg_color);
                     }
 
-                    ui.end_row();
+                    let mut column_offset = 0.0;
 
-                    for row in self.rows.as_ref() {
-                        for column in self.columns.iter_mut() {
-                            ui.label((column.value_mapper)(row));
+                    for (col_idx, column) in self.columns.iter_mut().enumerate() {
+                        let desired_column_width = state.column_width(col_idx);
+                        let cell_text = (column.value_mapper)(row);
+
+                        let mut column_rect = row_rect;
+                        column_rect.min.x += column_offset;
+
+                        if column_rect.width() > desired_column_width {
+                            column_rect.set_width(desired_column_width);
                         }
 
-                        ui.end_row();
+                        let painter = ui.painter_at(column_rect);
+
+                        let galley = ui.fonts().layout_single_line(cell_text_style, cell_text);
+
+                        let mut text_pos = column_rect.left_center();
+                        text_pos.x += self.cell_padding.x;
+                        text_pos.y -= galley.size.y / 2.0;
+                        painter.galley(text_pos, galley, cell_text_color);
+
+                        column_offset += column_rect.width();
                     }
-                })
-                .response
-        }).response
+
+                    // INTERACTION
+                    if let Some(selected_row) = self.selected_row.as_mut() {
+                        if response.clicked() {
+                            **selected_row = Some(row_idx);
+                        }
+                    }
+                }
+            });
+
+            // Handle global interactions.
+            if response.has_focus() {
+                if let Some(selected_row) = self.selected_row.as_mut() {
+                    if ui.input().key_pressed(Key::ArrowUp) {
+                        if let Some(selected_row) = selected_row.as_mut() {
+                            *selected_row = selected_row.saturating_sub(1);
+                        }
+                    }
+
+                    if ui.input().key_pressed(Key::ArrowDown) {
+                        if let Some(selected_row) = selected_row.as_mut() {
+                            if *selected_row < self.rows.as_ref().len() + 2 {
+                                *selected_row = selected_row.saturating_add(1);
+                            }
+                        } else if !self.rows.as_ref().is_empty() {
+                            **selected_row = Some(0);
+                        }
+                    }
+                }
+            }
+        });
+
+        if response.clicked() {
+            response.request_focus();
+        }
+
+        // ui.with_layout(Layout::top_down_justified(egui::Align::Min), |ui| {
+        //     Grid::new(self.id_source)
+        //         .striped(true)
+        //         .show(ui, move |ui| {
+        //             for column in self.columns.iter() {
+        //                 ui.button(&column.name);
+        //             }
+
+        //             ui.end_row();
+
+        //             for row in self.rows.as_ref() {
+        //                 for column in self.columns.iter_mut() {
+        //                     ui.label((column.value_mapper)(row));
+        //                 }
+
+        //                 ui.end_row();
+        //             }
+        //         })
+        //         .response
+        // }).response
+        response
     }
+}
+
+/// Persistent table UI state.
+#[derive(Clone, Default)]
+struct State {
+    /// Current width of each column. This is updated when a column is resized.
+    column_widths: Vec<f32>,
+}
+
+impl State {
+    fn column_width(&self, column: usize) -> f32 {
+        self.column_widths
+            .get(column)
+            .cloned()
+            .unwrap_or(DEFAULT_COLUMN_WIDTH)
+    }
+}
+
+struct TableHeader<'a, R> {
+    columns: &'a [Column<R>],
 }

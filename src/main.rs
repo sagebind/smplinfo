@@ -1,4 +1,4 @@
-#![allow(unused)]
+#![allow(dead_code)]
 #![windows_subsystem = "windows"]
 
 use std::env;

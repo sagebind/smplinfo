@@ -1,15 +1,7 @@
-use std::{
-    path::PathBuf,
-    sync::mpsc::{self, Receiver, Sender},
-};
-
-use eframe::{
-    egui::{self, vec2, Layout, Ui},
-    epi,
-};
+use eframe::{egui::{self, Layout, Window, vec2}, epi};
 use id_tree::NodeId;
 
-use crate::workspace::{Directory, Workspace};
+use crate::workspace::Workspace;
 
 use self::{
     about_dialog::AboutDialog,
@@ -28,6 +20,8 @@ pub struct App {
     about_window_open: bool,
     about_dialog: AboutDialog,
     selected_directory: Option<NodeId>,
+    selected_sample_index: Option<usize>,
+    developer_mode: bool,
 }
 
 impl Default for App {
@@ -38,6 +32,8 @@ impl Default for App {
             about_window_open: false,
             about_dialog: AboutDialog::default(),
             selected_directory: None,
+            selected_sample_index: None,
+            developer_mode: false,
         }
     }
 }
@@ -69,6 +65,16 @@ impl epi::App for App {
 
         self.poll_updates();
 
+        if ctx.input().key_pressed(egui::Key::D) && ctx.input().modifiers.ctrl {
+            self.developer_mode = !self.developer_mode;
+        }
+
+        if self.developer_mode {
+            Window::new("Egui Settings").show(ctx, |ui| {
+                ctx.settings_ui(ui);
+            });
+        }
+
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
             egui::menu::bar(ui, |ui| {
                 egui::menu::menu(ui, "File", |ui| {
@@ -96,8 +102,16 @@ impl epi::App for App {
                     }
                 }
 
-                if ui.add(TreeView::new("dir_tree", self.workspace.directories(), &mut self.selected_directory)).changed() {
+                if ui
+                    .add(TreeView::new(
+                        "dir_tree",
+                        self.workspace.directories(),
+                        &mut self.selected_directory,
+                    ))
+                    .changed()
+                {
                     if let Some(node_id) = self.selected_directory.clone() {
+                        self.selected_sample_index = None;
                         tasks::enqueue(move |app| {
                             app.workspace.set_selected_directory(&node_id);
                         });
@@ -106,44 +120,42 @@ impl epi::App for App {
             });
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("File List");
-
-            if let Some(node_id) = self.workspace.get_selected_directory() {
-                let node = self.workspace.directories().get(&node_id).unwrap();
-
-                let mut path = node.data().path().to_string_lossy().into_owned();
-                ui.add(egui::TextEdit::singleline(&mut path).enabled(false));
-
-                egui::containers::ScrollArea::auto_sized().show(ui, |ui| {
-                    ui.with_layout(Layout::top_down_justified(egui::Align::Min), |ui| {
-                        // ui.centered_and_justified(|ui| {
-                        ui.add(
-                            Table::new("file_list", self.workspace.files())
-                                .column("Filename", |sample| sample.name().into_owned())
-                                .column("Note", |sample| if let Some(note) = sample.note() {
-                                    note.to_string()
-                                } else {
-                                    "-".to_owned()
-                                })
-                        );
-                    });
-                });
-            } else {
-                ui.heading("Select a directory...");
-            }
-
-            ui.with_layout(egui::Layout::bottom_up(egui::Align::Center), |ui| {
-                ui.group(|ui| {
-                    ui.heading("Wave Form");
-                });
+            ui.group(|ui| {
+                ui.heading("Wave Form");
             });
+
+            let mut path = self.workspace.get_selected_directory()
+                .and_then(|node_id| self.workspace.directories().get(&node_id).ok())
+                .map(|node| node.data().path().to_string_lossy().into_owned())
+                .unwrap_or_default();
+
+            ui.add(egui::TextEdit::singleline(&mut path).enabled(false));
+
+            ui.add(
+                Table::new_selectable(
+                    "file_list",
+                    self.workspace.files(),
+                    &mut self.selected_sample_index,
+                )
+                .column("Filename", |sample| sample.name().into_owned())
+                .column("Note", |sample| {
+                    if let Some(note) = sample.note() {
+                        note.to_string()
+                    } else {
+                        "-".to_owned()
+                    }
+                }),
+            );
         });
     }
 }
 
 pub fn main() {
     let app = App::default();
-    let native_options = eframe::NativeOptions::default();
+    let native_options = eframe::NativeOptions {
+        initial_window_size: Some(vec2(800.0, 600.0)),
+        ..Default::default()
+    };
 
     eframe::run_native(Box::new(app), native_options);
 }

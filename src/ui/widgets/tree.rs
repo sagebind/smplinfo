@@ -44,7 +44,7 @@ impl<'tree, 'selected, T> TreeView<'tree, 'selected, T> {
 }
 
 impl<'tree, 'selected, T: Display> Widget for TreeView<'tree, 'selected, T> {
-    fn ui(mut self, ui: &mut Ui) -> Response {
+    fn ui(self, ui: &mut Ui) -> Response {
         let mut state = ui
             .memory()
             .id_data_temp
