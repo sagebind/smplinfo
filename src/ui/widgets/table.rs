@@ -149,28 +149,26 @@ impl<'s, R, C: AsRef<[R]>> Widget for Table<'s, R, C> {
         // homogenous table, we can figure out its exact sizes based on the
         // number of rows and columns.
         let table_rect = ui.available_rect_before_wrap_finite();
-        let response = ui.interact(table_rect, self.id_source, Sense::click());
+        let response = ui.interact(table_rect, self.id_source, Sense::hover());
 
-        ui.scope(|ui| {
-            // When laying out the table, don't allocate any spacing between the
-            // header and rows.
-            ui.spacing_mut().item_spacing.y = 0.0;
+        self.header_ui(ui, &mut state);
 
-            self.header_ui(ui, &mut state);
+        // Now render the table body, which is inside an independently
+        // scrollable area.
+        ScrollArea::auto_sized().show(ui, |ui| {
+            ui.scope(|ui| {
+                // When laying out the table, don't allocate any spacing between the
+                // rows.
+                ui.spacing_mut().item_spacing.y = 0.0;
 
-            ui.add_space(4.0);
-
-            // Now render the table body, which is inside an independently
-            // scrollable area.
-            ScrollArea::auto_sized().show(ui, |ui| {
                 // TODO: Decide row height more intelligently...
                 let row_size = vec2(ui.available_width(), self.row_height);
                 let cell_text_style = ui.style().body_text_style;
 
                 for (row_idx, row) in self.rows.as_ref().into_iter().enumerate() {
-                    let (_, row_rect) = ui.allocate_space(row_size);
-                    let row_id = self.id_source.with("_row_").with(row_idx);
-                    let response = ui.interact(row_rect, row_id, Sense::click());
+                    let (row_id, row_rect) = ui.allocate_space(row_size);
+                    // let row_id = self.id_source.with("_row_").with(row_idx);
+                    let row_response = ui.interact(row_rect, row_id, Sense::click());
                     let mut cell_text_color = ui.style().visuals.text_color();
 
                     // If this row is currently selected, make it look like it is.
@@ -181,7 +179,7 @@ impl<'s, R, C: AsRef<[R]>> Widget for Table<'s, R, C> {
                             0.0,
                             ui.style().visuals.selection.bg_fill,
                         );
-                    } else if response.hovered() {
+                    } else if row_response.hovered() {
                         ui.painter().rect_filled(
                             row_rect,
                             0.0,
@@ -219,59 +217,43 @@ impl<'s, R, C: AsRef<[R]>> Widget for Table<'s, R, C> {
 
                     // INTERACTION
                     if let Some(selected_row) = self.selected_row.as_mut() {
-                        if response.clicked() {
+                        if row_response.clicked() {
+                            log::debug!("row clicked: {}", row_idx);
                             **selected_row = Some(row_idx);
                         }
                     }
                 }
             });
+        });
 
-            // Handle global interactions.
-            if response.has_focus() {
-                if let Some(selected_row) = self.selected_row.as_mut() {
-                    if ui.input().key_pressed(Key::ArrowUp) {
-                        if let Some(selected_row) = selected_row.as_mut() {
-                            *selected_row = selected_row.saturating_sub(1);
-                        }
+        // Handle global interactions.
+        if response.has_focus() {
+            if let Some(selected_row) = self.selected_row.as_mut() {
+                if ui.input().key_pressed(Key::ArrowUp) {
+                    if let Some(selected_row) = selected_row.as_mut() {
+                        *selected_row = selected_row.saturating_sub(1);
                     }
+                }
 
-                    if ui.input().key_pressed(Key::ArrowDown) {
-                        if let Some(selected_row) = selected_row.as_mut() {
-                            if *selected_row < self.rows.as_ref().len() + 2 {
-                                *selected_row = selected_row.saturating_add(1);
-                            }
-                        } else if !self.rows.as_ref().is_empty() {
-                            **selected_row = Some(0);
+                if ui.input().key_pressed(Key::ArrowDown) {
+                    if let Some(selected_row) = selected_row.as_mut() {
+                        if *selected_row < self.rows.as_ref().len() + 2 {
+                            *selected_row = selected_row.saturating_add(1);
                         }
+                    } else if !self.rows.as_ref().is_empty() {
+                        **selected_row = Some(0);
                     }
                 }
             }
-        });
-
-        if response.clicked() {
-            response.request_focus();
         }
 
-        // ui.with_layout(Layout::top_down_justified(egui::Align::Min), |ui| {
-        //     Grid::new(self.id_source)
-        //         .striped(true)
-        //         .show(ui, move |ui| {
-        //             for column in self.columns.iter() {
-        //                 ui.button(&column.name);
-        //             }
+        if response.clicked() {
+            // TODO: How to have the whole table capture focus for keyboard
+            // navigation?
+            response.request_focus();
+            log::debug!("table clicked");
+        }
 
-        //             ui.end_row();
-
-        //             for row in self.rows.as_ref() {
-        //                 for column in self.columns.iter_mut() {
-        //                     ui.label((column.value_mapper)(row));
-        //                 }
-
-        //                 ui.end_row();
-        //             }
-        //         })
-        //         .response
-        // }).response
         response
     }
 }
@@ -290,8 +272,4 @@ impl State {
             .cloned()
             .unwrap_or(DEFAULT_COLUMN_WIDTH)
     }
-}
-
-struct TableHeader<'a, R> {
-    columns: &'a [Column<R>],
 }

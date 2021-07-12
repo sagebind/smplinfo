@@ -1,4 +1,4 @@
-use eframe::{egui::{self, Layout, Window, vec2}, epi};
+use eframe::{egui::{self, Layout, ScrollArea, Window, vec2}, epi};
 use id_tree::NodeId;
 
 use crate::workspace::Workspace;
@@ -11,6 +11,8 @@ use self::{
 
 mod about_dialog;
 mod directory_picker;
+mod log_console;
+pub mod logger;
 mod tasks;
 mod widgets;
 
@@ -67,6 +69,7 @@ impl epi::App for App {
 
         if ctx.input().key_pressed(egui::Key::D) && ctx.input().modifiers.ctrl {
             self.developer_mode = !self.developer_mode;
+            log::debug!("developer mode: {}", self.developer_mode);
         }
 
         if self.developer_mode {
@@ -147,10 +150,23 @@ impl epi::App for App {
                 }),
             );
         });
+
+        if self.developer_mode {
+            egui::TopBottomPanel::bottom("log_console")
+            .resizable(true)
+            .default_height(200.0)
+            .show(ctx, |ui| {
+                ScrollArea::auto_sized().show(ui, |ui| {
+                    ui.add(log_console::LogConsole);
+                });
+            });
+        }
     }
 }
 
 pub fn main() {
+    logger::init();
+
     let app = App::default();
     let native_options = eframe::NativeOptions {
         initial_window_size: Some(vec2(800.0, 600.0)),
