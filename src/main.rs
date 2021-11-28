@@ -1,14 +1,16 @@
 use anyhow::Result;
 use once_cell::sync::Lazy;
 use regex::Regex;
-use std::{fs::{self, OpenOptions, rename}, path::{Path, PathBuf}, str::FromStr};
+use std::{
+    fs::{self, rename, OpenOptions},
+    path::{Path, PathBuf},
+    str::FromStr,
+};
 use structopt::StructOpt;
 use walkdir::WalkDir;
 
-use smplinfo::{midi::Note, wav::Wav};
 use crate::format::FormatString;
-
-static ROOT_NOTE_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"\b[A-G]#?-?\d\b").unwrap());
+use smplinfo::{midi::Note, wav::Wav};
 
 mod format;
 
@@ -116,13 +118,10 @@ fn process_file(options: &Options, path: &Path) -> Result<()> {
 
     if options.root_note_from_filename {
         let filename = path.file_name().unwrap().to_string_lossy();
-        let matches = ROOT_NOTE_REGEX
-            .find_iter(filename.as_ref())
-            .collect::<Vec<_>>();
+        let notes = find_notes_in_string(filename.as_ref()).collect::<Vec<_>>();
 
-        if matches.len() == 1 {
-            let note = Note::from_str(matches[0].as_str()).unwrap();
-            new_root_note = Some(note);
+        if notes.len() == 1 {
+            new_root_note = Some(notes[0]);
         }
     }
 
@@ -158,4 +157,13 @@ fn process_file(options: &Options, path: &Path) -> Result<()> {
     println!();
 
     Ok(())
+}
+
+fn find_notes_in_string(s: &str) -> impl Iterator<Item = Note> + '_ {
+    static REGEX: Lazy<Regex> =
+        Lazy::new(|| Regex::new(r"(?:^|[\-_.\s])([A-G]#?-?\d)(?:$|[\-_.\s])").unwrap());
+
+    REGEX
+        .captures_iter(s)
+        .filter_map(|capture| Note::from_str(&capture[1]).ok())
 }
