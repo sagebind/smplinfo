@@ -2099,11 +2099,18 @@ dependencies = [
 name = "smplinfo"
 version = "0.1.0"
 dependencies = [
+ "riff",
+]
+
+[[package]]
+name = "smplinfo-cli"
+version = "0.1.0"
+dependencies = [
  "anyhow",
  "log",
  "once_cell",
  "regex",
- "riff",
+ "smplinfo",
  "stderrlog",
  "structopt",
  "walkdir",

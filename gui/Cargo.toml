@@ -20,12 +20,7 @@ threadpool = "1.8"
 walkdir = "2.3"
 
 [dependencies.smplinfo]
-path = ".."
+path = "../lib"
 
 [build-dependencies]
 embed-resource = "1.6"
-
-# Do some optimization to dependencies on debug builds so they aren't too laggy to
-# work with.
-[profile.dev.package."*"]
-opt-level = 1

@@ -1,6 +1,9 @@
-use std::{borrow::Cow, fs::File, path::{Path, PathBuf}};
-
-use anyhow::Result;
+use std::{
+    borrow::Cow,
+    fs::File,
+    io,
+    path::{Path, PathBuf},
+};
 
 use crate::{midi::Note, wav::Wav};
 
@@ -16,7 +19,7 @@ impl Sample {
     ///
     /// This opens the file, validates that it is a WAV file, and scrapes some
     /// metadata, but doesn't load the whole sample into memory.
-    pub fn read(path: impl Into<PathBuf>) -> Result<Self> {
+    pub fn read(path: impl Into<PathBuf>) -> io::Result<Self> {
         let path = path.into();
         let mut wav = Wav::new(File::open(&path)?)?;
         let mut note = None;
@@ -29,7 +32,10 @@ impl Sample {
     }
 
     pub fn name(&self) -> Cow<str> {
-        self.path.file_name().map(|s| s.to_string_lossy()).unwrap_or(Cow::Borrowed("<unknown>"))
+        self.path
+            .file_name()
+            .map(|s| s.to_string_lossy())
+            .unwrap_or(Cow::Borrowed("<unknown>"))
     }
 
     pub fn path(&self) -> &Path {

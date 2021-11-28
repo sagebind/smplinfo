@@ -1,5 +1,5 @@
 [package]
-name = "smplinfo"
+name = "smplinfo-cli"
 version = "0.1.0"
 authors = ["Stephen M. Coakley <me@stephencoakley.com>"]
 edition = "2018"
@@ -9,10 +9,21 @@ anyhow = "1"
 log = "0.4.11"
 once_cell = "1"
 regex = "1"
-riff = "1.0"
 stderrlog = "0.5"
 structopt = "0.3"
 walkdir = "2.3"
 
+[dependencies.smplinfo]
+path = "lib"
+
+[[bin]]
+name = "smplinfo"
+path = "src/main.rs"
+
 [workspace]
-members = ["gui"]
+members = ["gui", "lib"]
+
+# Do some optimization to dependencies on debug builds so they aren't too laggy
+# to work with.
+[profile.dev.package."*"]
+opt-level = 1

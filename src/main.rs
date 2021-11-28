@@ -1,14 +1,16 @@
 use anyhow::Result;
 use once_cell::sync::Lazy;
 use regex::Regex;
-use stderrlog::new;
-use std::{fmt::Write, fs::{self, OpenOptions, rename}, mem::take, path::{Path, PathBuf}, str::FromStr};
+use std::{fs::{self, OpenOptions, rename}, path::{Path, PathBuf}, str::FromStr};
 use structopt::StructOpt;
 use walkdir::WalkDir;
 
 use smplinfo::{midi::Note, wav::Wav};
+use crate::format::FormatString;
 
 static ROOT_NOTE_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"\b[A-G]#?-?\d\b").unwrap());
+
+mod format;
 
 /// WAV sample data reader and writer.
 ///
@@ -39,7 +41,7 @@ struct Options {
     /// - %n: Root note name
     /// - %%: Percent literal
     #[structopt(long, verbatim_doc_comment)]
-    rename: Option<Format>,
+    rename: Option<FormatString>,
 
     /// Set the root note
     #[structopt(long)]
@@ -147,8 +149,8 @@ fn process_file(options: &Options, path: &Path) -> Result<()> {
                     new_name
                 );
             } else {
-                rename(path, path.with_file_name(new_name))?;
                 drop(wav);
+                rename(path, path.with_file_name(new_name))?;
             }
         }
     }
@@ -156,82 +158,4 @@ fn process_file(options: &Options, path: &Path) -> Result<()> {
     println!();
 
     Ok(())
-}
-
-#[derive(Debug)]
-struct Format {
-    parts: Vec<FormatPart>,
-}
-
-#[derive(Debug)]
-enum FormatPart {
-    Literal(String),
-    MidiNote,
-    Note,
-}
-
-impl Format {
-    fn format(&self, root_note: Option<Note>) -> String {
-        let mut string = String::new();
-
-        for part in self.parts.iter() {
-            match part {
-                FormatPart::Literal(literal) => string.push_str(literal.as_str()),
-                FormatPart::MidiNote => {
-                    if let Some(note) = root_note {
-                        write!(string, "{:03}", u8::from(note)).unwrap();
-                    }
-                }
-                FormatPart::Note => {
-                    if let Some(note) = root_note {
-                        write!(string, "{}", note).unwrap();
-                    }
-                }
-            }
-        }
-
-        string
-    }
-}
-
-impl FromStr for Format {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut parts = Vec::new();
-        let mut chars = s.chars();
-        let mut buf = String::new();
-
-        while let Some(c) = chars.next() {
-            if c == '%' {
-                match chars.next() {
-                    Some('%') | None => buf.push('%'),
-                    Some('m') => {
-                        if !buf.is_empty() {
-                            parts.push(FormatPart::Literal(take(&mut buf)));
-                        }
-                        parts.push(FormatPart::MidiNote);
-                    }
-                    Some('n') => {
-                        if !buf.is_empty() {
-                            parts.push(FormatPart::Literal(take(&mut buf)));
-                        }
-                        parts.push(FormatPart::Note);
-                    }
-                    Some(c2) => {
-                        buf.push('%');
-                        buf.push(c2);
-                    }
-                }
-            } else {
-                buf.push(c);
-            }
-        }
-
-        if !buf.is_empty() {
-            parts.push(FormatPart::Literal(buf));
-        }
-
-        Ok(Self { parts })
-    }
 }

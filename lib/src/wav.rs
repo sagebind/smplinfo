@@ -1,9 +1,8 @@
 //! WAV format reading and writing routines.
 
 use crate::midi;
-use anyhow::{bail, Result};
 use riff::Chunk;
-use std::io::{Read, Seek, SeekFrom, Write};
+use std::io::{self, Read, Seek, SeekFrom, Write};
 
 pub struct Wav<F> {
     file: F,
@@ -11,17 +10,17 @@ pub struct Wav<F> {
 }
 
 impl<F: Read + Seek> Wav<F> {
-    pub fn new(mut file: F) -> Result<Self> {
+    pub fn new(mut file: F) -> io::Result<Self> {
         let header = Chunk::read(&mut file, 0)?;
 
         if header.read_type(&mut file)?.as_str() != "WAVE" {
-            bail!("not a WAV file");
+            return Err(io::Error::new(io::ErrorKind::Other, "not a WAV file"));
         }
 
         Ok(Self { file, header })
     }
 
-    pub fn get_sampler_chunk(&mut self) -> Result<Option<SamplerChunk>> {
+    pub fn get_sampler_chunk(&mut self) -> io::Result<Option<SamplerChunk>> {
         if let Some(offset) = self.find_chunk_offset("smpl")? {
             self.file.seek(SeekFrom::Start(offset))?;
 
@@ -31,7 +30,7 @@ impl<F: Read + Seek> Wav<F> {
         }
     }
 
-    fn find_chunk_offset(&mut self, id: &str) -> Result<Option<u64>> {
+    fn find_chunk_offset(&mut self, id: &str) -> io::Result<Option<u64>> {
         let chunk = Chunk::read(&mut self.file, 0)?;
 
         for child in chunk.iter(&mut self.file) {
@@ -45,7 +44,7 @@ impl<F: Read + Seek> Wav<F> {
 }
 
 impl<F: Read + Seek + Write> Wav<F> {
-    pub fn update_sampler_chunk(&mut self, f: impl FnOnce(&mut SamplerChunk)) -> Result<()> {
+    pub fn update_sampler_chunk(&mut self, f: impl FnOnce(&mut SamplerChunk)) -> io::Result<()> {
         if let Some(offset) = self.find_chunk_offset("smpl")? {
             self.file.seek(SeekFrom::Start(offset))?;
             let mut chunk = SamplerChunk::read(&mut self.file)?;
@@ -78,7 +77,7 @@ impl Default for SamplerChunk {
     fn default() -> Self {
         let mut header = [0; 44];
 
-        &mut header[..4].copy_from_slice(Self::ID);
+        (&mut header[..4]).copy_from_slice(Self::ID);
         header[5] = 36;
 
         Self { header }
@@ -88,7 +87,7 @@ impl Default for SamplerChunk {
 impl SamplerChunk {
     const ID: &'static [u8] = b"smpl";
 
-    fn read<R>(mut reader: R) -> Result<Self>
+    fn read<R>(mut reader: R) -> io::Result<Self>
     where
         R: Read + Seek,
     {
@@ -96,7 +95,7 @@ impl SamplerChunk {
         reader.read_exact(&mut header)?;
 
         if &header[..4] != Self::ID {
-            bail!("invalid smpl chunk");
+            return Err(io::Error::new(io::ErrorKind::Other, "invalid smpl chunk"));
         }
 
         Ok(Self { header })
