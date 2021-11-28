@@ -31,7 +31,7 @@ impl FromStr for Note {
         for (offset, name) in NOTE_NAMES.into_iter().enumerate() {
             if let Some(suffix) = s.strip_prefix(name) {
                 if let Ok(number) = suffix.parse::<u8>() {
-                    return Ok(Note::from(((number as usize + 1) * NOTE_NAMES.len() + offset) as u8));
+                    return Ok(Note::from(((number as usize + 2) * NOTE_NAMES.len() + offset) as u8));
                 }
             }
         }
@@ -42,14 +42,9 @@ impl FromStr for Note {
 
 impl fmt::Display for Note {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.0 >= 12 {
-            let index = (self.0 - 12) as usize;
-            f.write_str(NOTE_NAMES[index % NOTE_NAMES.len()])?;
+        f.write_str(NOTE_NAMES[self.0 as usize % NOTE_NAMES.len()])?;
 
-            ((self.0 as usize - NOTE_NAMES.len()) / NOTE_NAMES.len()).fmt(f)
-        } else {
-            self.0.fmt(f)
-        }
+        ((self.0 / 12) as i16 - 2).fmt(f)
     }
 }
 
@@ -61,20 +56,21 @@ mod tests {
     fn parse() {
         assert_eq!(Note::from_str("0").unwrap(), Note::from(0));
         assert_eq!(Note::from_str("51").unwrap(), Note::from(51));
-        assert_eq!(Note::from_str("A0").unwrap(), Note::from(21));
-        assert_eq!(Note::from_str("C1").unwrap(), Note::from(24));
+        assert_eq!(Note::from_str("A0").unwrap(), Note::from(33));
+        assert_eq!(Note::from_str("C1").unwrap(), Note::from(36));
     }
 
     #[test]
     fn display_name() {
-        assert_eq!(Note::from(0).to_string(), "0");
-        assert_eq!(Note::from(11).to_string(), "11");
-        assert_eq!(Note::from(12).to_string(), "C0");
-        assert_eq!(Note::from(20).to_string(), "G#0");
-        assert_eq!(Note::from(21).to_string(), "A0");
-        assert_eq!(Note::from(22).to_string(), "A#0");
-        assert_eq!(Note::from(23).to_string(), "B0");
-        assert_eq!(Note::from(24).to_string(), "C1");
-        assert_eq!(Note::from(127).to_string(), "G9");
+        assert_eq!(Note::from(0).to_string(), "C-2");
+        assert_eq!(Note::from(11).to_string(), "B-2");
+        assert_eq!(Note::from(12).to_string(), "C-1");
+        assert_eq!(Note::from(20).to_string(), "G#-1");
+        assert_eq!(Note::from(33).to_string(), "A0");
+        assert_eq!(Note::from(34).to_string(), "A#0");
+        assert_eq!(Note::from(35).to_string(), "B0");
+        assert_eq!(Note::from(36).to_string(), "C1");
+        assert_eq!(Note::from(60).to_string(), "C3");
+        assert_eq!(Note::from(127).to_string(), "G8");
     }
 }
