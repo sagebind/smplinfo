@@ -8,7 +8,7 @@ mod manager;
 
 pub use directories::Directory;
 
-use crate::sample::Sample;
+use smplinfo::sample::Sample;
 
 pub enum Event {
     DirectoryTreeUpdated(directories::DirectoryTree),

@@ -1964,6 +1964,19 @@ name = "smplinfo"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "embed-resource",
+ "log",
+ "riff",
+ "stderrlog",
+ "structopt",
+ "walkdir",
+]
+
+[[package]]
+name = "smplinfo-gui"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
  "cpal",
  "eframe",
  "embed-resource",
@@ -1974,6 +1987,7 @@ dependencies = [
  "once_cell",
  "rfd",
  "riff",
+ "smplinfo",
  "stderrlog",
  "structopt",
  "threadpool",

@@ -1,16 +1,27 @@
 [package]
-name = "smplinfo"
+name = "smplinfo-gui"
 version = "0.1.0"
 authors = ["Stephen M. Coakley <me@stephencoakley.com>"]
 edition = "2018"
 
 [dependencies]
 anyhow = "1"
+cpal = "0.13"
+eframe = "0.13"
+futures-lite = "1.12"
+id_tree = "1.8"
 log = "0.4.11"
+notify = "4"
+once_cell = "1"
+rfd = "0.4"
 riff = "1.0"
 stderrlog = "0.5"
 structopt = "0.3"
+threadpool = "1.8"
 walkdir = "2.3"
+
+[dependencies.smplinfo]
+path = ".."
 
 [build-dependencies]
 embed-resource = "1.6"
@@ -19,6 +30,3 @@ embed-resource = "1.6"
 # work with.
 [profile.dev.package."*"]
 opt-level = 1
-
-[workspace]
-members = ["gui"]

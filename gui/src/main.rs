@@ -1,20 +1,23 @@
+#![windows_subsystem = "windows"]
+
 use eframe::{egui::{self, Layout, ScrollArea, Window, vec2}, epi};
 use id_tree::NodeId;
-
-use crate::workspace::Workspace;
 
 use self::{
     about_dialog::AboutDialog,
     directory_picker::PickDirectoryTask,
     widgets::{Table, TreeView},
+    workspace::Workspace,
 };
 
 mod about_dialog;
 mod directory_picker;
+mod futures;
 mod log_console;
 pub mod logger;
 mod tasks;
 mod widgets;
+mod workspace;
 
 pub struct App {
     workspace: Workspace,
